@@ -22,84 +22,71 @@ type Transaction struct {
 	Outputs []TxOutput
 }
 
-func NewTransaction(from, to string, amount int, chain *BlockChain) *Transaction {
+func NewTransaction(from, to string, amount int, UTXO *UTXOSet) *Transaction {
 	var inputs []TxInput
 	var outputs []TxOutput
 
 	wallets, err := wallet.CreateWallets()
 	Handle(err)
 
-	fmt.Println(1)
 	w := wallets.GetWallet(from)
-	fmt.Println(2)
 
 	pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
-	fmt.Println(3)
 
-	acc, validOutputs := chain.FindSpendableOutputs(pubKeyHash, amount)
-	fmt.Println(4)
-
+	acc, validOutputs := UTXO.FindSpendableOutputs(pubKeyHash, amount)
 	if acc < amount {
 		log.Panic("Error: not enough funds")
 	}
 
-	fmt.Println(5)
-
 	for txid, outs := range validOutputs {
-		fmt.Println(7)
 
 		txID, err := hex.DecodeString(txid)
 		Handle(err)
-		fmt.Println(8)
 
 		for _, out := range outs {
 			input := TxInput{txID, out, nil, w.PublicKey}
 			inputs = append(inputs, input)
-			fmt.Println(9)
 
 		}
 	}
-	fmt.Println(10)
 
 	outputs = append(outputs, *NewTXOutput(amount, to))
-	fmt.Println(11)
-
 	if acc > amount {
 		outputs = append(outputs, *NewTXOutput(acc-amount, from))
 	}
-	fmt.Println(12)
 
 	tx := Transaction{nil, inputs, outputs}
 	tx.ID = tx.Hash()
-	fmt.Println(13)
 
-	chain.SignTransaction(&tx, w.PrivateKey)
-	fmt.Println(14)
+	UTXO.BlockChain.SignTransaction(&tx, w.PrivateKey)
 
 	return &tx
 }
 
-func (tx *Transaction) SetID() {
-	var encoded bytes.Buffer
-	var hash [32]byte
+// func (tx *Transaction) SetID() {
+// 	var encoded bytes.Buffer
+// 	var hash [32]byte
 
-	encode := gob.NewEncoder(&encoded)
-	err := encode.Encode(tx)
-	Handle(err)
+// 	encode := gob.NewEncoder(&encoded)
+// 	err := encode.Encode(tx)
+// 	Handle(err)
 
-	hash = sha256.Sum256(encoded.Bytes())
-	tx.ID = hash[:]
-}
+// 	hash = sha256.Sum256(encoded.Bytes())
+// 	tx.ID = hash[:]
+// }
 
 func CoinbaseTx(to, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Coins to %s", to)
+		randData := make([]byte, 24)
+		_, err := rand.Read(randData)
+		Handle(err)
+		data = fmt.Sprintf("%x", randData)
 	}
 	txIn := TxInput{[]byte{}, -1, nil, []byte(data)}
-	txOut := NewTXOutput(100, to)
+	txOut := NewTXOutput(20, to)
 
 	tx := Transaction{nil, []TxInput{txIn}, []TxOutput{*txOut}}
-	tx.SetID()
+	tx.ID = tx.Hash()
 
 	return &tx
 }
@@ -132,11 +119,9 @@ func (tx *Transaction) Hash() []byte {
 }
 
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
-	fmt.Println(30)
 	if tx.IsCoinbase() {
 		return
 	}
-	fmt.Println(31)
 
 	for _, in := range tx.Inputs {
 		if prevTXs[hex.EncodeToString(in.ID)].ID == nil {
@@ -144,14 +129,9 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		}
 	}
 
-	fmt.Println(32)
-
 	txCopy := tx.TrimmedCopy()
 
-	fmt.Println(33)
-
 	for inId, in := range txCopy.Inputs {
-		fmt.Println(34)
 
 		prevTX := prevTXs[hex.EncodeToString(in.ID)]
 		txCopy.Inputs[inId].Signature = nil
@@ -159,7 +139,6 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		txCopy.ID = txCopy.Hash()
 		txCopy.Inputs[inId].PubKey = nil
 
-		fmt.Println(35)
 		privKey.PublicKey.Curve = elliptic.P256() // Change this to the correct curve if needed
 
 		fmt.Printf("txCopy.ID: %x\n", txCopy.ID)
@@ -168,19 +147,12 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		// Print the signature components for verification
 		fmt.Printf("r: %s\n", r.Text(16))
 		fmt.Printf("s: %s\n", s.Text(16))
-		fmt.Println(355)
 
-		fmt.Println(err)
 		Handle(err)
 
-		fmt.Println(36)
-
 		signature := append(r.Bytes(), s.Bytes()...)
-		fmt.Println(37)
 
 		tx.Inputs[inId].Signature = signature
-		fmt.Println(38)
-
 	}
 }
 
