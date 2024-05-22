@@ -8,13 +8,15 @@ import (
 	"os"
 )
 
-const walletFile = "./tmp/wallets.data"
+const walletFile = "./tmp/wallets_%s.data"
 
 type Wallets struct {
 	Wallets map[string]*Wallet
 }
 
-func (ws *Wallets) SaveFile() {
+func (ws *Wallets) SaveFile(nodeID string) {
+	walletFile := fmt.Sprintf(walletFile, nodeID)
+
 	data, err := ws.Serialize()
 	if err != nil {
 		log.Panic(err)
@@ -26,11 +28,11 @@ func (ws *Wallets) SaveFile() {
 	}
 }
 
-func CreateWallets() (*Wallets, error) {
+func CreateWallets(nodeID string) (*Wallets, error) {
 	wallets := Wallets{}
 	wallets.Wallets = make(map[string]*Wallet)
 
-	err := wallets.LoadFile()
+	err := wallets.LoadFile(nodeID)
 
 	return &wallets, err
 }
@@ -56,7 +58,9 @@ func (ws *Wallets) GetAllAddresses() []string {
 	return addresses
 }
 
-func (ws *Wallets) LoadFile() error {
+func (ws *Wallets) LoadFile(nodeID string) error {
+	walletFile := fmt.Sprintf(walletFile, nodeID)
+
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		return err
 	}
